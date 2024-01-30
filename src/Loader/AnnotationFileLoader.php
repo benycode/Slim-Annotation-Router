@@ -1,17 +1,18 @@
-<?php declare(strict_types=1);
+<?php
+
+declare(strict_types=1);
 
 namespace Slim\AnnotationRouter\Loader;
 
 /**
  * Class AnnotationFileLoader - Based on Symfony Annotation Loader
  *
- * @since 22.04.2019
- * @author Daniel Tęcza
+ * @since 22.04.2019, Updated 2024-01-30
+ * @author Daniel Tęcza, Benediktas Rukas
  * @package Slim\AnnotationRouter\Loader
  */
 class AnnotationFileLoader
 {
-
     /** @var \Slim\AnnotationRouter\Loader\AnnotationClassLoader */
     protected $loader;
 
@@ -37,7 +38,7 @@ class AnnotationFileLoader
      *
      * @throws \ReflectionException
      */
-    public function load(string $filePath, string $type = null): array
+    public function load(string $filePath, string $type = null) : array
     {
         $collection = [];
 
@@ -62,7 +63,7 @@ class AnnotationFileLoader
      *
      * @return bool
      */
-    public function supports($resource, string $type = null): bool
+    public function supports($resource, string $type = null) : bool
     {
         return \is_string($resource) && 'php' === pathinfo($resource, PATHINFO_EXTENSION) && (!$type || 'annotation' === $type);
     }
@@ -74,64 +75,33 @@ class AnnotationFileLoader
      *
      * @return string|false Full class name if found, false otherwise
      */
-    protected function findClass(string $file): ?string
+    protected function findClass(string $filePath) : ?string
     {
-        $class = false;
-        $namespace = false;
-        $tokens = token_get_all(file_get_contents($file));
+        $tokens = \token_get_all(\file_get_contents($filePath));
 
-        if (1 === \count($tokens) && T_INLINE_HTML === $tokens[0][0]) {
-            throw new \InvalidArgumentException(sprintf('The file "%s" does not contain PHP code. Did you forgot to add the "<?php" start tag at the beginning of the file?', $file));
-        }
+        $namespace = '';
+        $className = '';
 
-        for ($i = 0; isset($tokens[$i]); ++$i) {
-            $token = $tokens[$i];
-
-            if (!isset($token[1])) {
-                continue;
-            }
-
-            if (true === $class && T_STRING === $token[0]) {
-                return $namespace.'\\'.$token[1];
-            }
-
-            if (true === $namespace && T_STRING === $token[0]) {
-                $namespace = $token[1];
-                while (isset($tokens[++$i][1]) && \in_array($tokens[$i][0], [T_NS_SEPARATOR, T_STRING], true)) {
-                    $namespace .= $tokens[$i][1];
+        foreach ($tokens as $key => $token) {
+            if (is_array($token) && T_NAMESPACE === $token[0]) {
+                $namespace = '';
+                while (isset($tokens[++$key][1])) {
+                    $namespace .= $tokens[$key][1];
                 }
-                $token = $tokens[$i];
-            }
-
-            if (T_CLASS === $token[0]) {
-                // Skip usage of ::class constant and anonymous classes
-                $skipClassToken = false;
-
-                for ($j = $i - 1; $j > 0; --$j) {
-                    if (!isset($tokens[$j][1])) {
-                        break;
-                    }
-
-                    if (T_DOUBLE_COLON === $tokens[$j][0] || T_NEW === $tokens[$j][0]) {
-                        $skipClassToken = true;
-                        break;
-                    }
-
-                    if (!\in_array($tokens[$j][0], [T_WHITESPACE, T_DOC_COMMENT, T_COMMENT], true)) {
+            } elseif (is_array($token) && T_CLASS === $token[0]) {
+                while (isset($tokens[++$key][1])) {
+                    if(T_STRING === $tokens[$key][0]) {
+                        $className .= $tokens[$key][1];
                         break;
                     }
                 }
-
-                if (!$skipClassToken) {
-                    $class = true;
-                }
-            }
-
-            if (T_NAMESPACE === $token[0]) {
-                $namespace = true;
+                break;
             }
         }
 
-        return null;
+        $namespace = trim($namespace, " \t\n\r\0\x0B\\");
+        $className = trim($className, " \t\n\r\0\x0B{");
+
+        return $namespace ? $namespace . '\\' . $className : $className;
     }
 }
